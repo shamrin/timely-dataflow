@@ -525,12 +525,13 @@ OperatorImpl<T, L, DO> {
             notify: notify,
         }
     }
-}
 
-fn update_frontiers<T: Timestamp>(frontiers: &mut Vec<MutableAntichain<T>>, count_maps: &mut [CountMap<T>]) {
-    for (counts, frontier) in count_maps.iter_mut().zip(frontiers.iter_mut()) {
-        while let Some((time, delta)) = counts.pop() {
-            frontier.update(&time, delta);
+    // Applies received changes to frontiers to the maintained frontier information.
+    fn update_frontiers(&mut self, count_maps: &mut [CountMap<T>]) {
+        for (counts, frontier) in count_maps.iter_mut().zip(self.frontier.iter_mut()) {
+            while let Some((time, delta)) = counts.pop() {
+                frontier.update(&time, delta);
+            }
         }
     }
 }
@@ -563,11 +564,11 @@ Operate<T> for OperatorImpl<T, L, DO> {
 
     fn set_external_summary(&mut self, _summaries: Vec<Vec<Antichain<T::Summary>>>,
                                        count_map: &mut [CountMap<T>]) {
-        update_frontiers(&mut self.frontier, count_map);
+        self.update_frontiers(count_map);
     }
 
     fn push_external_progress(&mut self, count_map: &mut [CountMap<T>]) {
-        update_frontiers(&mut self.frontier, count_map);
+        self.update_frontiers(count_map);
     }
 
     fn pull_internal_progress(&mut self, consumed: &mut [CountMap<T>],
