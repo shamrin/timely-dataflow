@@ -87,7 +87,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///
     /// timely::example(|scope| {
     ///     (0u64..10).to_stream(scope)
-    ///         .unary(Pipeline, "example", |default_cap| {
+    ///         .unary_frontierless(Pipeline, "example", |default_cap| {
     ///             let mut cap = Some(default_cap.delayed(&RootTimestamp::new(12)));
     ///             move |input, output| {
     ///                 if let Some(ref c) = cap.take() {
@@ -100,7 +100,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///         });
     /// });
     /// ```
-    fn unary<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
+    fn unary_frontierless<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
     where
         D2: Data,
         B: FnOnce(Capability<G::Timestamp>) -> L,
@@ -179,7 +179,7 @@ pub trait Operator<G: Scope, D1: Data> {
     /// timely::example(|scope| {
     ///     let stream2 = (0u64..10).to_stream(scope);
     ///     (0u64..10).to_stream(scope)
-    ///         .binary(&stream2, Pipeline, Pipeline, "example", |default_cap| {
+    ///         .binary_frontierless(&stream2, Pipeline, Pipeline, "example", |default_cap| {
     ///             let mut cap = Some(default_cap.delayed(&RootTimestamp::new(12)));
     ///             move |input1, input2, output| {
     ///                 if let Some(ref c) = cap.take() {
@@ -195,7 +195,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///         }).inspect(|x| println!("{:?}", x));
     /// });
     /// ```
-    fn binary<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
+    fn binary_frontierless<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
     where
         D2: Data,
         D3: Data,
@@ -363,7 +363,7 @@ impl<G: Scope, D1: Data> Operator<G, D1> for Stream<G, D1> {
         Stream::new(Source { index: index, port: 0 }, registrar, scope)
     }
 
-    fn unary<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
+    fn unary_frontierless<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
     where
         D2: Data,
         B: FnOnce(Capability<G::Timestamp>) -> L,
@@ -396,7 +396,7 @@ impl<G: Scope, D1: Data> Operator<G, D1> for Stream<G, D1> {
         Stream::new(Source { index: index, port: 0 }, registrar, scope)
     }
 
-    fn binary<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
+    fn binary_frontierless<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
     where
         D2: Data,
         D3: Data,
