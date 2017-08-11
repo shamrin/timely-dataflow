@@ -45,7 +45,7 @@ pub trait Operator<G: Scope, D1: Data> {
     /// fn main() {
     ///     timely::example(|scope| {
     ///         (0u64..10).to_stream(scope)
-    ///             .unary_frontier(Pipeline, "example", |default_cap| {
+    ///             .unary(Pipeline, "example", |default_cap| {
     ///                 let mut cap = Some(default_cap.delayed(&RootTimestamp::new(12)));
     ///                 let mut notificator = FrontierNotificator::new();
     ///                 let mut stash = HashMap::new();
@@ -66,7 +66,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///     });
     /// }
     /// ```
-    fn unary_frontier<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
+    fn unary<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
     where
         D2: Data,
         B: FnOnce(Capability<G::Timestamp>) -> L,
@@ -122,7 +122,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///    let (mut in1, mut in2) = worker.dataflow(|scope| {
     ///        let (in1_handle, in1) = scope.new_input();
     ///        let (in2_handle, in2) = scope.new_input();
-    ///        in1.binary_frontier(&in2, Pipeline, Pipeline, "example", |mut _builder| {
+    ///        in1.binary(&in2, Pipeline, Pipeline, "example", |mut _builder| {
     ///            let mut notificator = FrontierNotificator::new();
     ///            let mut stash = HashMap::new();
     ///            move |input1, input2, output| {
@@ -153,7 +153,7 @@ pub trait Operator<G: Scope, D1: Data> {
     ///    }
     /// }).unwrap();
     /// ```
-    fn binary_frontier<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
+    fn binary<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
     where
         D2: Data,
         D3: Data,
@@ -330,7 +330,7 @@ where
 
 impl<G: Scope, D1: Data> Operator<G, D1> for Stream<G, D1> {
 
-    fn unary_frontier<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
+    fn unary<D2, B, L, P>(&self, pact: P, name: &str, constructor: B) -> Stream<G, D2>
     where
         D2: Data,
         B: FnOnce(Capability<G::Timestamp>) -> L,
@@ -396,47 +396,7 @@ impl<G: Scope, D1: Data> Operator<G, D1> for Stream<G, D1> {
         Stream::new(Source { index: index, port: 0 }, registrar, scope)
     }
 
-    fn binary_frontierless<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
-    where
-        D2: Data,
-        D3: Data,
-        B: FnOnce(Capability<G::Timestamp>) -> L,
-        L: FnMut(&mut InputHandle<G::Timestamp, D1>, &mut InputHandle<G::Timestamp, D2>, &mut OutputHandle<G::Timestamp, D3, Tee<G::Timestamp, D3>>)+'static,
-        P1: ParallelizationContract<G::Timestamp, D1>,
-        P2: ParallelizationContract<G::Timestamp, D2> {
-
-        let (cap, internal_changes) = make_default_cap::<G>();
-        let mut logic = constructor(cap);
-
-        let (mut input1, (sender1, channel_id1),
-             mut input2, (sender2, channel_id2),
-             (targets, registrar), mut scope) = binary_base(self, pact1, pact2);
-
-        let operator = OperatorImpl::new(
-            name.to_owned(),
-            2,
-            scope.peers(),
-            move |consumed, internal, _, output| {
-                {
-                    let mut input_handle1 = new_input_handle(&mut input1, internal.clone());
-                    let mut input_handle2 = new_input_handle(&mut input2, internal);
-                    logic(&mut input_handle1, &mut input_handle2, output);
-                }
-                input1.pull_progress(&mut consumed[0]);
-                input2.pull_progress(&mut consumed[1]);
-            },
-            internal_changes,
-            targets,
-            false);
-
-        let index = scope.add_operator(operator);
-        self.connect_to(Target { index: index, port: 0 }, sender1, channel_id1);
-        other.connect_to(Target { index: index, port: 1 }, sender2, channel_id2);
-
-        Stream::new(Source { index: index, port: 0 }, registrar, scope)
-    }
-
-    fn binary_frontier<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
+    fn binary<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
     where
         D2: Data,
         D3: Data,
@@ -476,7 +436,46 @@ impl<G: Scope, D1: Data> Operator<G, D1> for Stream<G, D1> {
         other.connect_to(Target { index: index, port: 1 }, sender2, channel_id2);
 
         Stream::new(Source { index: index, port: 0 }, registrar, scope)
+    }
 
+    fn binary_frontierless<D2, D3, B, L, P1, P2>(&self, other: &Stream<G, D2>, pact1: P1, pact2: P2, name: &str, constructor: B) -> Stream<G, D3>
+    where
+        D2: Data,
+        D3: Data,
+        B: FnOnce(Capability<G::Timestamp>) -> L,
+        L: FnMut(&mut InputHandle<G::Timestamp, D1>, &mut InputHandle<G::Timestamp, D2>, &mut OutputHandle<G::Timestamp, D3, Tee<G::Timestamp, D3>>)+'static,
+        P1: ParallelizationContract<G::Timestamp, D1>,
+        P2: ParallelizationContract<G::Timestamp, D2> {
+
+        let (cap, internal_changes) = make_default_cap::<G>();
+        let mut logic = constructor(cap);
+
+        let (mut input1, (sender1, channel_id1),
+             mut input2, (sender2, channel_id2),
+             (targets, registrar), mut scope) = binary_base(self, pact1, pact2);
+
+        let operator = OperatorImpl::new(
+            name.to_owned(),
+            2,
+            scope.peers(),
+            move |consumed, internal, _, output| {
+                {
+                    let mut input_handle1 = new_input_handle(&mut input1, internal.clone());
+                    let mut input_handle2 = new_input_handle(&mut input2, internal);
+                    logic(&mut input_handle1, &mut input_handle2, output);
+                }
+                input1.pull_progress(&mut consumed[0]);
+                input2.pull_progress(&mut consumed[1]);
+            },
+            internal_changes,
+            targets,
+            false);
+
+        let index = scope.add_operator(operator);
+        self.connect_to(Target { index: index, port: 0 }, sender1, channel_id1);
+        other.connect_to(Target { index: index, port: 1 }, sender2, channel_id2);
+
+        Stream::new(Source { index: index, port: 0 }, registrar, scope)
     }
 }
 
